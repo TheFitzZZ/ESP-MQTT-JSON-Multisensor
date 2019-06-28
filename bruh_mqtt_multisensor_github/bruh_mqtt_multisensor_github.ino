@@ -19,6 +19,12 @@
       - Adafruit unified sensor
       - PubSubClient
       - ArduinoJSON
+	  
+  UPDATE 16 MAY 2017 by Knutella - Fixed MQTT disconnects when wifi drops by moving around Reconnect and adding a software reset of MCU
+	           
+  UPDATE 23 MAY 2017 - The MQTT_MAX_PACKET_SIZE parameter may not be setting appropriately due to a bug in the PubSub library. If the MQTT messages are not being transmitted as expected you may need to change the MQTT_MAX_PACKET_SIZE parameter in "PubSubClient.h" directly.
+  
+  UPDATE 27 NOV 2017 - Changed HeatIndex to built in function of DHT library. Added definition for fahrenheit or celsius
 
 */
 
@@ -33,6 +39,8 @@
 #include <ArduinoJson.h>
 
 
+/************ TEMP SETTINGS (CHANGE THIS FOR YOUR SETUP) *******************************/
+#define IsFahrenheit true //to use celsius change to false
 
 /************ WIFI and MQTT INFORMATION (CHANGE THESE FOR YOUR SETUP) ******************/
 #define wifi_ssid "YourSSID" //type your WIFI information inside the quotes
@@ -41,6 +49,7 @@
 #define mqtt_user "yourMQTTusername" 
 #define mqtt_password "yourMQTTpassword"
 #define mqtt_port 1883
+
 
 
 /************* MQTT TOPICS (change these topics as you wish)  **************************/
@@ -54,7 +63,7 @@ const char* off_cmd = "OFF";
 
 /**************************** FOR OTA **************************************************/
 #define SENSORNAME "sensornode1"
-#define OTApassword "bruh"
+#define OTApassword "YouPassword" // change this to whatever password you want to use when you upload OTA
 int OTAport = 8266;
 
 
@@ -186,7 +195,7 @@ void setup() {
   Serial.println("Ready");
   Serial.print("IPess: ");
   Serial.println(WiFi.localIP());
-
+  reconnect();
 }
 
 
@@ -346,6 +355,7 @@ void sendState() {
   root["motion"] = (String)motionStatus;
   root["ldr"] = (String)LDR;
   root["temperature"] = (String)tempValue;
+  root["heatIndex"] = (String)dht.computeHeatIndex(tempValue, humValue, IsFahrenheit);
 
 
   char buffer[root.measureLength() + 1];
@@ -354,6 +364,7 @@ void sendState() {
   Serial.println(buffer);
   client.publish(light_state_topic, buffer, true);
 }
+
 
 
 /********************************** START SET COLOR *****************************************/
@@ -402,21 +413,20 @@ bool checkBoundSensor(float newValue, float prevValue, float maxDiff) {
 }
 
 
-
 /********************************** START MAIN LOOP***************************************/
 void loop() {
 
   ArduinoOTA.handle();
-
+  
   if (!client.connected()) {
-    reconnect();
+    // reconnect();
+    software_Reset();
   }
   client.loop();
 
-
   if (!inFade) {
 
-    float newTempValue = dht.readTemperature(true);
+    float newTempValue = dht.readTemperature(IsFahrenheit);
     float newHumValue = dht.readHumidity();
 
     //PIR CODE
@@ -592,3 +602,9 @@ int calculateVal(int step, int val, int i) {
   return val;
 }
 
+/****reset***/
+void software_Reset() // Restarts program from beginning but does not reset the peripherals and registers
+{
+Serial.print("resetting");
+ESP.reset(); 
+}
